@@ -47,37 +47,57 @@ ul, li {
   }
 }
 
-@pull-to-refresh: list-view-refresh-control;
+@pull-to-refresh: rmc-pull-to-refresh;
 .@{pull-to-refresh} {
-  position: relative;
-  overflow: hidden;
-  user-select: none;
-
   &-content {
-    transform-origin: left top;
-    transform: translateZ(0);
+    &-wrapper {
+      overflow: hidden;
+    }
+
+    transform-origin: left top 0px;
   }
 
-  &-ptr {
+  &-indicator {
     color: grey;
     text-align: center;
-    height: 50px;
-    line-height: 50px;
-    margin-top: -50px;
-    overflow: hidden;
-    &-icon {
+    height: 25px;
+    line-height: 25px;
+  }
+  
+  &-down .@{pull-to-refresh}-indicator {
+    margin-top: -25px;
+  }
+  
+  &-up .@{pull-to-refresh}-indicator {
+    margin-bottom: -25px;
+  }
+  
+  &-transition {
+    transition: transform 0.3s;
+  }
+}
+
+@refresh-control: zscroller-refresh-control;
+.@{refresh-control} {
+  &-indicator {
+    color: grey;
+    text-align: center;
+    height: 25px;
+    line-height: 25px;
+    margin-top: -25px;
+    &-icon-wrapper {
       display: block;
     }
-    &-loading {
+    &-loading-wrapper {
       display: none;
     }
   }
   &-loading {
-    .@{pull-to-refresh}-ptr {
-      &-icon {
+    .@{refresh-control}-indicator {
+      &-icon-wrapper {
         display: none;
       }
-      &-loading {
+      &-loading-wrapper {
         display: block;
       }
     }
@@ -96,9 +116,8 @@ ul, li {
     display: block;
   }
   &-deactive {
-    .@{pull-to-refresh}-ptr {
-      &-icon,
-      &-loading {
+    .@{refresh-control}-indicator {
+      &-loading-wrapper {
         display: none;
       }
     }

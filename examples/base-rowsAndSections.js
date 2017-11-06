@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
-import 'rmc-list-view/assets/index.less';
+/* eslint react/sort-comp: 0 */
+import '../assets/index.less';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import ListView from 'rmc-list-view';
-import { View, Text, Thumb } from './util';
+import ListView from '../src';
 
-const NUM_SECTIONS = 20;
-const NUM_ROWS_PER_SECTION = 10;
+const NUM_SECTIONS = 5;
+const NUM_ROWS_PER_SECTION = 5;
 let pageIndex = 0;
 
 const dataBlobs = {};
@@ -50,6 +50,8 @@ class Demo extends React.Component {
   }
 
   componentDidMount() {
+    document.body.style.overflowY =
+      navigator.userAgent.match(/Android|iPhone|iPad|iPod/i) ? 'hidden' : 'auto';
     // you can scroll to the specified position
     // setTimeout(() => this.lv.scrollTo(0, 120), 800);
 
@@ -82,54 +84,20 @@ class Demo extends React.Component {
   }
 
   render() {
-    return (<div>
+    return (<div style={{ border: '1px solid #ccc', margin: 10 }}>
       <ListView
         ref={el => this.lv = el}
         dataSource={this.state.dataSource}
-        renderHeader={() => (
-          <View style={{ height: 90, backgroundColor: '#bbb' }}>
-            <Text>Table Header</Text>
-          </View>
-        )}
-        renderSectionHeader={(sectionData) => (
-          <View style={{
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            padding: 6,
-            backgroundColor: '#5890ff',
-          }}
-          >
-            <Text style={{ color: 'white' }}>
-              {sectionData}
-            </Text>
-          </View>
-        )}
-        renderRow={(rowData) => (<Thumb text={rowData} />) }
-        renderFooter={() => (
-          <View style={{ height: 90, backgroundColor: '#bbb', textAlign: 'center' }}>
-            Table Footer
-          </View>
-        )}
-        initialListSize={10}
-        pageSize={4}
-        scrollRenderAheadDistance={500}
-        scrollEventThrottle={20}
-        onScroll={() => {}}
+        style={{ height: 200 }}
+        renderHeader={() => <div style={{ height: 40 }}>Header</div>}
+        renderSectionHeader={sectionData =>
+          <div style={{ padding: 6, background: '#bbb' }}>{sectionData}</div>}
+        renderRow={rowData => <div style={{ padding: 16 }}>{rowData}</div> }
+        renderFooter={() => (<div style={{ padding: 20, background: '#e34' }}>
+          {this.state.isLoading ? 'loading...' : 'loaded'}</div>)}
         onEndReached={this.onEndReached}
-        onEndReachedThreshold={500}
-        renderBodyComponent={() => <div className="for-body-demo" />}
-        stickyHeader
-        stickyProps={{
-          className: 'for-sticky-demo',
-          stickyStyle: { top: '10px', WebkitTransform: 'none', transform: 'none' },
-          onStickyStateChange: (isSticky) => {
-            console.log(isSticky);
-          },
-        }}
-        stickyContainerProps={{
-          className: 'for-stickyContainer-demo',
-        }}
+        onEndReachedThreshold={10}
+        pageSize={10}
       />
     </div>);
   }

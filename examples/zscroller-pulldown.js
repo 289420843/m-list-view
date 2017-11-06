@@ -1,11 +1,28 @@
 /* eslint-disable no-console */
-import 'rmc-list-view/assets/index.less';
+/* eslint no-dupe-keys: 0, no-mixed-operators: 0 */
+import '../assets/index.less';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import ListView from 'rmc-list-view';
-import { myData as data } from './util';
-/* eslint no-dupe-keys: 0, no-mixed-operators: 0 */
+import ListView from '../src';
+import Zscroller from '../src/Zscroller';
 
+const data = [
+  {
+    img: 'https://zos.alipayobjects.com/rmsportal/dKbkpPXKfvZzWCM.png',
+    title: 'Meet hotel',
+    des: '不是所有的兼职汪都需要风吹日晒',
+  },
+  {
+    img: 'https://zos.alipayobjects.com/rmsportal/XmwCzSeJiqpkuMB.png',
+    title: 'McDonald\'s invites you',
+    des: '不是所有的兼职汪都需要风吹日晒',
+  },
+  {
+    img: 'https://zos.alipayobjects.com/rmsportal/hfVtzEhPzTUewPm.png',
+    title: 'Eat the week',
+    des: '不是所有的兼职汪都需要风吹日晒',
+  },
+];
 let index = data.length - 1;
 
 const NUM_ROWS = 20;
@@ -29,6 +46,7 @@ class Demo extends React.Component {
     this.state = {
       dataSource,
       refreshing: true,
+      height: document.documentElement.clientHeight,
     };
   }
 
@@ -42,13 +60,18 @@ class Demo extends React.Component {
   // }
 
   componentDidMount() {
+    document.body.style.overflowY =
+      navigator.userAgent.match(/Android|iPhone|iPad|iPod/i) ? 'hidden' : 'auto';
+
     // handle https://github.com/ant-design/ant-design-mobile/issues/1588
     this.lv.getInnerViewNode().addEventListener('touchstart', this.ts = (e) => {
       this.tsPageY = e.touches[0].pageY;
     });
+    // In chrome61 `document.body.scrollTop` is invalid
+    const scrollNode = document.scrollingElement ? document.scrollingElement : document.body;
     this.lv.getInnerViewNode().addEventListener('touchmove', this.tm = (e) => {
       this.tmPageY = e.touches[0].pageY;
-      if (this.tmPageY > this.tsPageY && this.st <= 0 && document.body.scrollTop > 0) {
+      if (this.tmPageY > this.tsPageY && this.scrollerTop <= 0 && scrollNode.scrollTop > 0) {
         console.log('start pull to refresh');
         this.domScroller.options.preventDefaultOnTouchMove = false;
       } else {
@@ -64,14 +87,14 @@ class Demo extends React.Component {
 
   onScroll = (e) => {
     // onScroll will trigger on container touchstart, ref https://github.com/yiminghe/zscroller/blob/a67854c8dc0a1fda15acae4ffdb08e65aac79fb3/src/DOMScroller.js#L229
-    this.st = e.scroller.getValues().top;
+    this.scrollerTop = e.scroller.getValues().top;
     this.domScroller = e;
   };
 
   onRefresh = () => {
     console.log('onRefresh');
     if (!this.manuallyRefresh) {
-      this.setState({ refreshing: true });
+      this.setState({ refreshing: true, isLoading: true });
     } else {
       this.manuallyRefresh = false;
     }
@@ -82,8 +105,13 @@ class Demo extends React.Component {
       this.setState({
         dataSource: this.state.dataSource.cloneWithRows(this.rData),
         refreshing: false,
+        isLoading: false,
+        showFinishTxt: true,
       });
-    }, 600);
+      if (this.domScroller) {
+        this.domScroller.scroller.options.animationDuration = 500;
+      }
+    }, 200);
   };
 
   onEndReached = (event) => {
@@ -104,12 +132,35 @@ class Demo extends React.Component {
     }, 1000);
   };
 
+  scrollingComplete = () => {
+    // In general, this.scrollerTop should be 0 at the end, but it may be -0.000051 in chrome61.
+    if (this.scrollerTop >= -1) {
+      this.setState({ showFinishTxt: false });
+    }
+  }
+
+  renderCustomIcon() {
+    return [
+      <div key="0" className="zscroller-refresh-control-pull">
+        <span>{this.state.showFinishTxt ? '刷新完毕' : '下拉可以刷新'}</span>
+      </div>,
+      <div key="1" className="zscroller-refresh-control-release">
+        <span>松开立即刷新</span>
+      </div>,
+    ];
+  }
+
   render() {
     return (
       <ListView
         ref={el => this.lv = el}
         dataSource={this.state.dataSource}
+        style={{ height: 400, border: '1px solid #ddd', margin: '10px 0' }}
+        renderScrollComponent={props => <Zscroller {...props} />}
         renderHeader={() => <span>Pull to refresh</span>}
+        renderFooter={() => (<div style={{ padding: 30, textAlign: 'center' }}>
+          {this.state.isLoading ? 'Loading...' : 'Loaded'}
+        </div>)}
         renderRow={(rowData, sectionID, rowID) => {
           if (index < 0) {
             index = data.length - 1;
@@ -131,28 +182,15 @@ class Demo extends React.Component {
         renderSeparator={(sectionID, rowID) => (
           <div key={`${sectionID}-${rowID}`} style={{ backgroundColor: '#F5F5F9', height: 8 }} />
         )}
-        initialListSize={5}
-        pageSize={5}
-        style={{
-          height: 400,
-          border: '1px solid #ddd',
-          margin: '10px 0',
-        }}
-        useZscroller
-        scrollerOptions={{
-          scrollbars: true, scrollingComplete: () => console.log('scrollingComplete'),
-        }}
-        refreshControl={<ListView.RefreshControl
-          className="my-refresh-control"
-          refreshing={this.state.refreshing}
-          onRefresh={this.onRefresh}
-          resistance={1}
-        />}
+        scrollerOptions={{ scrollbars: true, scrollingComplete: this.scrollingComplete }}
+        refreshControl
+        refreshing={this.state.refreshing}
+        onRefresh={this.onRefresh}
+        icon={this.renderCustomIcon()}
         onScroll={this.onScroll}
-        scrollRenderAheadDistance={200}
-        scrollEventThrottle={20}
         onEndReached={this.onEndReached}
         onEndReachedThreshold={10}
+        pageSize={10}
       />
     );
   }

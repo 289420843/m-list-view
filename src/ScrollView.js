@@ -1,7 +1,5 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import ReactDOM from 'react-dom';
-import DOMScroller from 'zscroller';
 import classNames from 'classnames';
 import { throttle } from './util';
 
@@ -13,7 +11,6 @@ import { throttle } from './util';
 /* eslint react/prop-types: 0, react/sort-comp: 0, no-unused-expressions: 0 */
 
 const propTypes = {
-  children: PropTypes.any,
   className: PropTypes.string,
   prefixCls: PropTypes.string,
   listPrefixCls: PropTypes.string,
@@ -21,21 +18,6 @@ const propTypes = {
   style: PropTypes.object,
   contentContainerStyle: PropTypes.object,
   onScroll: PropTypes.func,
-  scrollEventThrottle: PropTypes.number,
-  refreshControl: PropTypes.element,
-};
-const styles = {
-  base: {
-    position: 'relative',
-    overflow: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    flex: 1,
-  },
-  zScroller: {
-    position: 'relative',
-    overflow: 'hidden',
-    flex: 1,
-  },
 };
 
 export default class ScrollView extends React.Component {
@@ -46,196 +28,107 @@ export default class ScrollView extends React.Component {
     // 问题情景：用户滚动内容后，改变 dataSource 触发 ListView componentWillReceiveProps
     // 内容变化后 scrollTop 如果改变、会自动触发 scroll 事件，而此事件应该避免被执行
     if ((this.props.dataSource !== nextProps.dataSource ||
-        this.props.initialListSize !== nextProps.initialListSize) && this.tsExec) {
+        this.props.initialListSize !== nextProps.initialListSize) && this.handleScroll) {
       // console.log('componentWillUpdate');
-      if (this.props.stickyHeader || this.props.useBodyScroll) {
-        window.removeEventListener('scroll', this.tsExec);
-      } else if (!this.props.useZscroller) { // not handle useZscroller now. todo
-        ReactDOM.findDOMNode(this.ScrollViewRef).removeEventListener('scroll', this.tsExec);
+      if (this.props.useBodyScroll) {
+        window.removeEventListener('scroll', this.handleScroll);
+      } else {
+        this.ScrollViewRef.removeEventListener('scroll', this.handleScroll);
       }
     }
   }
   componentDidUpdate(prevProps) {
-    // console.log('componentDidUpdate');
-    if (prevProps.refreshControl && this.props.refreshControl) {
-      const preRefreshing = prevProps.refreshControl.props.refreshing;
-      const nowRefreshing = this.props.refreshControl.props.refreshing;
-      if (preRefreshing && !nowRefreshing && this.refreshControlRefresh) {
-        this.refreshControlRefresh();
-      } else if (!this.manuallyRefresh && !preRefreshing && nowRefreshing) {
-        this.domScroller.scroller.triggerPullToRefresh();
-      }
-    }
     // handle componentWillUpdate accordingly
     if ((this.props.dataSource !== prevProps.dataSource ||
-        this.props.initialListSize !== prevProps.initialListSize) && this.tsExec) {
-      // console.log('componentDidUpdate');
+        this.props.initialListSize !== prevProps.initialListSize) && this.handleScroll) {
       setTimeout(() => {
-        if (this.props.stickyHeader || this.props.useBodyScroll) {
-          window.addEventListener('scroll', this.tsExec);
-        } else if (!this.props.useZscroller) { // not handle useZscroller now. todo
-          ReactDOM.findDOMNode(this.ScrollViewRef).addEventListener('scroll', this.tsExec);
+        if (this.props.useBodyScroll) {
+          window.addEventListener('scroll', this.handleScroll);
+        } else {
+          this.ScrollViewRef.addEventListener('scroll', this.handleScroll);
         }
       }, 0);
     }
   }
   componentDidMount() {
-    this.tsExec = this.throttleScroll();
+    let handleScroll = e => this.props.onScroll && this.props.onScroll(e, this.getMetrics());
+    if (this.props.scrollEventThrottle) {
+      handleScroll = throttle(handleScroll, this.props.scrollEventThrottle);
+    }
+    this.handleScroll = handleScroll;
+
     // IE supports onresize on all HTML elements.
     // In all other Browsers the onresize is only available at the window object
     this.onLayout = () => this.props.onLayout({
       nativeEvent: { layout: { width: window.innerWidth, height: window.innerHeight } },
     });
-    const ele = ReactDOM.findDOMNode(this.ScrollViewRef);
 
-    if (this.props.stickyHeader || this.props.useBodyScroll) {
-      window.addEventListener('scroll', this.tsExec);
+    if (this.props.useBodyScroll) {
+      window.addEventListener('scroll', this.handleScroll);
       window.addEventListener('resize', this.onLayout);
-      // todo
-      // ele.addEventListener('resize', this.onContentSizeChange);
     } else {
-      // todo
-      // ele.addEventListener('resize', this.onLayout);
-      // ReactDOM.findDOMNode(this.InnerScrollViewRef)
-      // .addEventListener('resize', this.onContentSizeChange);
-      if (this.props.useZscroller) {
-        this.renderZscroller();
-      } else {
-        ele.addEventListener('scroll', this.tsExec);
-      }
+      this.ScrollViewRef.addEventListener('scroll', this.handleScroll);
     }
   }
   componentWillUnmount() {
-    if (this.props.stickyHeader || this.props.useBodyScroll) {
-      window.removeEventListener('scroll', this.tsExec);
+    if (this.props.useBodyScroll) {
+      window.removeEventListener('scroll', this.handleScroll);
       window.removeEventListener('resize', this.onLayout);
-    } else if (this.props.useZscroller) {
-      this.domScroller.destroy();
     } else {
-      ReactDOM.findDOMNode(this.ScrollViewRef).removeEventListener('scroll', this.tsExec);
+      this.ScrollViewRef.removeEventListener('scroll', this.handleScroll);
     }
   }
 
-  getInnerViewNode = () => {
-    return ReactDOM.findDOMNode(this.InnerScrollViewRef);
+  getMetrics = () => {
+    const isVertical = !this.props.horizontal;
+    if (this.props.useBodyScroll) {
+      // In chrome61 `document.body.scrollTop` is invalid,
+      // and add new `document.scrollingElement`(chrome61, iOS support).
+      // In old-android-browser and iOS `document.documentElement.scrollTop` is invalid.
+      const scrollNode = document.scrollingElement ? document.scrollingElement : document.body;
+      // todos: Why sometimes do not have `this.ScrollViewRef` ?
+      return {
+        visibleLength: window[isVertical ? 'innerHeight' : 'innerWidth'],
+        contentLength: this.ScrollViewRef ?
+          this.ScrollViewRef[isVertical ? 'scrollHeight' : 'scrollWidth'] : 0,
+        offset: scrollNode[isVertical ? 'scrollTop' : 'scrollLeft'],
+      };
+    }
+    return {
+      visibleLength: this.ScrollViewRef[isVertical ? 'offsetHeight' : 'offsetWidth'],
+      contentLength: this.ScrollViewRef[isVertical ? 'scrollHeight' : 'scrollWidth'],
+      offset: this.ScrollViewRef[isVertical ? 'scrollTop' : 'scrollLeft'],
+    };
   }
+
+  getInnerViewNode = () => this.InnerScrollViewRef;
 
   scrollTo = (...args) => {
-    if (this.props.stickyHeader || this.props.useBodyScroll) {
+    if (this.props.useBodyScroll) {
       window.scrollTo(...args);
-    } else if (this.props.useZscroller) {
-      // it will change zScroller's dimensions on data loaded, so it needs fire reflow.
-      this.domScroller.reflow();
-      this.domScroller.scroller.scrollTo(...args);
     } else {
-      const ele = ReactDOM.findDOMNode(this.ScrollViewRef);
-      ele.scrollLeft = args[0];
-      ele.scrollTop = args[1];
+      this.ScrollViewRef.scrollLeft = args[0];
+      this.ScrollViewRef.scrollTop = args[1];
     }
   }
 
-  throttleScroll = () => {
-    let handleScroll = () => {};
-    if (this.props.scrollEventThrottle && this.props.onScroll) {
-      handleScroll = throttle(e => {
-        this.props.onScroll && this.props.onScroll(e);
-      }, this.props.scrollEventThrottle);
-    }
-    return handleScroll;
-  }
-
-  scrollingComplete = () => {
-    // console.log('scrolling complete');
-    if (this.props.refreshControl &&
-    this.RefreshControlRef && this.RefreshControlRef.state.deactive) {
-      this.RefreshControlRef.setState({ deactive: false });
-    }
-  }
-
-  renderZscroller() {
-    const { scrollerOptions, refreshControl } = this.props;
-    const { scrollingComplete, onScroll, ...restProps } = scrollerOptions;
-    // console.log(scrollingComplete, onScroll, restProps);
-    // console.log('onRefresh will not change', refreshControl.props.onRefresh.toString());
-    this.domScroller = new DOMScroller(this.getInnerViewNode(), {
-      scrollingX: false,
-      onScroll: () => {
-        this.tsExec();
-        if (onScroll) {
-          onScroll();
-        }
-      },
-      scrollingComplete: () => {
-        this.scrollingComplete();
-        if (scrollingComplete) {
-          scrollingComplete();
-        }
-      },
-      ...restProps,
-    });
-    if (refreshControl) {
-      const scroller = this.domScroller.scroller;
-      const { distanceToRefresh, onRefresh } = refreshControl.props;
-      scroller.activatePullToRefresh(distanceToRefresh,
-        () => {
-          // console.log('first reach the distance');
-          this.manuallyRefresh = true;
-          this.overDistanceThenRelease = false;
-          this.RefreshControlRef && this.RefreshControlRef.setState({ active: true });
-        },
-        () => {
-          // console.log('back to the distance', this.overDistanceThenRelease);
-          this.manuallyRefresh = false;
-          this.RefreshControlRef && this.RefreshControlRef.setState({
-            deactive: this.overDistanceThenRelease,
-            active: false,
-            loadingState: false,
-          });
-        },
-        () => {
-          // console.log('Over distance and release to loading');
-          this.overDistanceThenRelease = true;
-          this.RefreshControlRef && this.RefreshControlRef.setState({
-            deactive: false,
-            loadingState: true,
-          });
-          const finishPullToRefresh = () => {
-            scroller.finishPullToRefresh();
-            this.refreshControlRefresh = null;
-          };
-          Promise.all([
-            new Promise(resolve => {
-              onRefresh();
-              this.refreshControlRefresh = resolve;
-            }),
-            // at lease 1s for ux
-            new Promise(resolve => setTimeout(resolve, 1000)),
-          ]).then(finishPullToRefresh, finishPullToRefresh);
-        });
-      if (refreshControl.props.refreshing) {
-        scroller.triggerPullToRefresh();
-      }
-    }
-  }
   render() {
     const {
-      children, className, prefixCls = '', listPrefixCls = '', listViewPrefixCls = 'rmc-list-view',
-      style = {}, contentContainerStyle = {},
-      useZscroller, refreshControl, stickyHeader, useBodyScroll,
+      children, className, prefixCls, listPrefixCls, listViewPrefixCls,
+      style = {}, contentContainerStyle = {}, useBodyScroll, pullToRefresh,
     } = this.props;
 
-    let styleBase = styles.base;
-    if (stickyHeader || useBodyScroll) {
-      styleBase = {};
-    } else if (useZscroller) {
-      styleBase = styles.zScroller;
-    }
-
+    const styleBase = {
+      position: 'relative',
+      overflow: 'auto',
+      WebkitOverflowScrolling: 'touch',
+      flex: 1,
+    };
     const preCls = prefixCls || listViewPrefixCls || '';
 
     const containerProps = {
       ref: el => this.ScrollViewRef = el,
-      style: { ...styleBase, ...style },
+      style: { ...(useBodyScroll ? {} : styleBase), ...style },
       className: classNames(className, `${preCls}-scrollview`),
     };
     const contentContainerProps = {
@@ -244,27 +137,40 @@ export default class ScrollView extends React.Component {
       className: classNames(`${preCls}-scrollview-content`, listPrefixCls),
     };
 
-    if (refreshControl) {
-      return (
-        <div {...containerProps}>
-          <div {...contentContainerProps}>
-            {React.cloneElement(refreshControl, { ref: el => this.RefreshControlRef = el })}
-            {children}
-          </div>
-        </div>
-      );
-    }
+    const clonePullToRefresh = isBody => React.cloneElement(pullToRefresh, {
+      getScrollContainer: isBody ? () => document.body : () => this.ScrollViewRef,
+    }, children);
 
-    if (stickyHeader || useBodyScroll) {
+    if (useBodyScroll) {
+      if (pullToRefresh) {
+        return (
+          <div {...containerProps}>
+            {clonePullToRefresh(true)}
+          </div>
+        );
+      }
       return (
         <div {...containerProps}>
           {children}
         </div>
       );
     }
+
+    if (pullToRefresh) {
+      return (
+        <div {...containerProps}>
+          <div {...contentContainerProps}>
+            {clonePullToRefresh()}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div {...containerProps}>
-        <div {...contentContainerProps}>{children}</div>
+        <div {...contentContainerProps}>
+          {children}
+        </div>
       </div>
     );
   }
